@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+set -eu
+project_doctor_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+PYTHONPATH="$project_doctor_root/src${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m project_doctor "$@"
