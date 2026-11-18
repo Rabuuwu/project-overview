@@ -1,5 +1,22 @@
 # project-doctor
 
+## Workspace discovery — updated 2026-11-18
+
+`list --root` always lists projects **under** the workspace, even if the workspace
+itself contains package.json or .git. Use `inspect . --root <path>` to inspect
+that directory itself. An empty workspace returns an empty list.
+
+Hidden directories, dependency/build directories and directory symlinks are
+excluded in both modes. Recursive mode includes nested repositories (for example
+smartwatch-os/RabuWatchOS), searches at most four levels and stops at each project
+boundary instead of listing a monorepo's internal packages as separate projects.
+Discovery is generic: visible personal repositories are not automatically excluded.
+Review the list before using it to drive any external automation.
+
+GitHub Actions runs unit and CLI regression tests on Python 3.11, 3.12 and 3.13.
+The workflow's remote result must be checked after pushing; local tests do not
+prove that GitHub Actions has run.
+
 `project-doctor` is a small, dependency-free CLI for taking a read-only inventory of a workspace containing multiple repositories. It is designed for a portfolio of independent applications such as DealQuill, D&D Companion, TradingHelper, and FSE-IT.
 
 ## What it does
@@ -77,3 +94,15 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 python -m compileall -q src tests
 ```
 
+## Verification — 2026-11-18
+
+- `./_tools/devhouse test project-overview` from the parent workspace: **11 tests passed**.
+- Python syntax compilation and `git diff --check`: passed.
+- Actual workspace smoke: default listing found 11 direct projects; recursive listing
+  found 12, including `smartwatch-os/RabuWatchOS`, without returning the parent.
+- GitHub Actions configuration added; remote execution not yet verified.
+
+This fixes discovery in project-doctor. Separate devhouse issues (setup dispatch,
+project-specific test coverage and opt-in recursive discovery) are not resolved by
+this change; a working list does not guarantee that every project's test adapter
+is complete.

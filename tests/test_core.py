@@ -28,6 +28,59 @@ class ProjectDoctorTests(unittest.TestCase):
         (hidden / "package.json").write_text("{}", encoding="utf-8")
         self.assertEqual([app.resolve()], discover_projects(self.root))
 
+    def test_workspace_manifest_and_git_do_not_hide_children(self) -> None:
+        (self.root / "package.json").write_text("{}")
+        (self.root / ".git").mkdir()
+        app = self.make_project("app")
+        (app / "pyproject.toml").write_text("[project]\nname='app'\n")
+        other = self.make_project("other")
+        (other / ".git").write_text("gitdir: elsewhere")
+        for recursive in (False, True):
+            with self.subTest(recursive=recursive):
+                self.assertEqual([app.resolve(), other.resolve()],
+                                 discover_projects(self.root, recursive=recursive))
+        self.assertEqual(str(self.root.resolve()), inspect_project(self.root)["path"])
+
+    def test_empty_workspace_with_manifest_does_not_list_itself(self) -> None:
+        (self.root / "package.json").write_text("{}")
+        self.assertEqual([], discover_projects(self.root))
+
+    def test_nested_project_requires_recursive_and_stops_at_repository(self) -> None:
+        nested = self.root / "smartwatch-os" / "RabuWatchOS"
+        nested.mkdir(parents=True)
+        (nested / ".git").mkdir()
+        package = nested / "packages" / "internal"
+        package.mkdir(parents=True)
+        (package / "package.json").write_text("{}")
+        self.assertEqual([], discover_projects(self.root))
+        self.assertEqual([nested.resolve()], discover_projects(self.root, recursive=True))
+
+    def test_dependencies_hidden_directories_and_links_are_excluded(self) -> None:
+        for name in ("node_modules", "vendor", "build", ".private"):
+            folder = self.make_project(name)
+            (folder / "package.json").write_text("{}")
+            child = folder / "child"
+            child.mkdir()
+            (child / "package.json").write_text("{}")
+        with tempfile.TemporaryDirectory() as outside:
+            (Path(outside) / "package.json").write_text("{}")
+            (self.root / "linked-project").symlink_to(outside, target_is_directory=True)
+            for recursive in (False, True):
+                with self.subTest(recursive=recursive):
+                    self.assertEqual([], discover_projects(self.root, recursive=recursive))
+
+    def test_recursive_depth_boundary(self) -> None:
+        for parent in ("one/two/three/four", "deep/two/three/four/five"):
+            path = self.root / parent
+            path.mkdir(parents=True)
+            (path / "package.json").write_text("{}")
+        self.assertEqual([(self.root / "one/two/three/four").resolve()],
+                         discover_projects(self.root, recursive=True))
+
+    def test_missing_root_is_an_error(self) -> None:
+        with self.assertRaises(ValueError):
+            discover_projects(self.root / "missing")
+
     def test_reads_manifest_metadata_without_reading_env_file_contents(self) -> None:
         project = self.make_project("web-app")
         (project / "package.json").write_text(

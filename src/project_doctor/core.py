@@ -53,23 +53,24 @@ def _is_project(path: Path) -> bool:
 
 
 def discover_projects(root: Path, recursive: bool = False, max_depth: int = 4) -> list[Path]:
-    """Find project roots without entering dependency, build, or hidden folders."""
+    """List children of a workspace; inspect_project handles the root itself.
+
+    Recursive discovery stops at each project boundary and never follows links.
+    """
     root = root.expanduser().resolve()
     if not root.is_dir():
         raise ValueError(f"Root directory does not exist: {root}")
-    if _is_project(root):
-        return [root]
 
     found: list[Path] = []
     if not recursive:
-        candidates = sorted((p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")), key=lambda p: p.name.casefold())
+        candidates = sorted((p for p in root.iterdir() if p.is_dir() and not p.is_symlink() and p.name not in IGNORED_DIRS and not p.name.startswith(".")), key=lambda p: p.name.casefold())
         return [path.resolve() for path in candidates if _is_project(path)]
 
     for current, dirs, _files in os.walk(root):
         current_path = Path(current)
         depth = len(current_path.relative_to(root).parts)
         dirs[:] = sorted(
-            (name for name in dirs if name not in IGNORED_DIRS and not name.startswith(".")),
+            (name for name in dirs if name not in IGNORED_DIRS and not name.startswith(".") and not (current_path / name).is_symlink()),
             key=str.casefold,
         )
         if depth >= max_depth:
@@ -100,7 +101,7 @@ def _nested_agents_files(root: Path, max_depth: int = 5) -> list[str]:
         current_path = Path(current)
         depth = len(current_path.relative_to(root).parts)
         dirs[:] = sorted(
-            (name for name in dirs if name not in IGNORED_DIRS and not name.startswith(".")),
+            (name for name in dirs if name not in IGNORED_DIRS and not name.startswith(".") and not (current_path / name).is_symlink()),
             key=str.casefold,
         )
         if depth >= max_depth:
